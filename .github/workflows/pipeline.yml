@@ -2,7 +2,8 @@ name: DevSecOps Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   security:
@@ -12,21 +13,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Build Docker image
       - name: Build Docker image
         run: docker build -t juice-shop .
 
-      # Gitleaks (ne bloque pas pipeline)
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@v2
         continue-on-error: true
 
-      # Semgrep
       - name: Semgrep
         uses: returntocorp/semgrep-action@v1
         continue-on-error: true
 
-      # Install Trivy
       - name: Install Trivy
         run: |
           sudo apt-get update
@@ -36,27 +33,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y trivy
 
-      # Trivy filesystem scan
       - name: Trivy FS
         run: trivy fs .
         continue-on-error: true
 
-      # Trivy image scan
       - name: Trivy Image
         run: trivy image juice-shop
         continue-on-error: true
 
-      # Run container
       - name: Run container
         run: docker run -d -p 3000:3000 --name juice juice-shop
 
-      # Wait app startup
       - name: Wait for app
         run: sleep 20
 
-      # ZAP Scan
       - name: ZAP Scan
         run: |
-          docker run --network host ghcr.io/zaproxy/zaproxy:stable \
-          zap-baseline.py -t http://localhost:3000
-        continue-on-error: true.
+          docker run --network host ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://localhost:3000
+        continue-on-error: true
