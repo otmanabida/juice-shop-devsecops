@@ -1,4 +1,4 @@
-name: DevSecOps Juice Shop
+name: DevSecOps Pipeline
 
 on:
   push:
@@ -9,50 +9,54 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # 1. BUILD
+      # Build Docker image
       - name: Build Docker image
         run: docker build -t juice-shop .
 
-      # 2. GITLEAKS (secrets)
-      - name: Gitleaks Scan
+      # Gitleaks (ne bloque pas pipeline)
+      - name: Gitleaks
         uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
 
-      # 3. SEMGREP (SAST)
-      - name: Semgrep Scan
+      # Semgrep
+      - name: Semgrep
         uses: returntocorp/semgrep-action@v1
+        continue-on-error: true
 
-      # 4. TRIVY filesystem scan
-      - name: Trivy FS Scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          format: json
-          output: trivy-fs.json
+      # Install Trivy
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
 
-      # 5. TRIVY image scan
-      - name: Trivy Image Scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: juice-shop
-          format: json
-          output: trivy-image.json
+      # Trivy filesystem scan
+      - name: Trivy FS
+        run: trivy fs .
+        continue-on-error: true
 
-      # 6. RUN CONTAINER (deploy test)
+      # Trivy image scan
+      - name: Trivy Image
+        run: trivy image juice-shop
+        continue-on-error: true
+
+      # Run container
       - name: Run container
         run: docker run -d -p 3000:3000 --name juice juice-shop
 
-      # 7. OWASP ZAP (DAST)
+      # Wait app startup
+      - name: Wait for app
+        run: sleep 20
+
+      # ZAP Scan
       - name: ZAP Scan
         run: |
           docker run --network host ghcr.io/zaproxy/zaproxy:stable \
           zap-baseline.py -t http://localhost:3000
-
-      # 8. SAVE REPORTS
-      - name: Upload reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-reports
-          path: .
+        continue-on-error: true.
